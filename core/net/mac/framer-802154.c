@@ -42,7 +42,7 @@
 #include "lib/random.h"
 #include <string.h>
 
-#define DEBUG 0
+#define DEBUG 1
 
 #if DEBUG
 #include <stdio.h>
@@ -65,13 +65,38 @@ static uint8_t initialized = 0;
  *   sending to.  If this value is 0xffff, the device is not
  *   associated.
  */
-static const uint16_t mac_dst_pan_id = IEEE802154_PANID;
+#ifndef TEST_FRAME_802154_SECURITY
+static const
+#endif
+uint16_t mac_dst_pan_id = IEEE802154_PANID;
 
 /**  \brief The 16-bit identifier of the PAN on which the device is
  *   operating.  If this value is 0xffff, the device is not
  *   associated.
  */
-static const uint16_t mac_src_pan_id = IEEE802154_PANID;
+#ifndef TEST_FRAME_802154_SECURITY
+static const
+#endif
+uint16_t mac_src_pan_id = IEEE802154_PANID;
+
+/**
+ * From frame802154-sec.c
+ */
+#ifdef FRAME_802154_CONF_SECURITY
+extern uint8_t frame802154_security_enabled;
+extern uint8_t frame802154_security_level;
+extern uint8_t frame802154_key_id_mode;
+#endif
+
+/* For testing only */
+#ifdef TEST_FRAME_802154_SECURITY
+void test_framer802154___set_parameters(uint8_t mac_dsn2, uint16_t mac_dst_pan_id2, uint16_t mac_src_pan_id2) {
+  mac_dsn = mac_dsn2;
+  mac_dst_pan_id = mac_dst_pan_id2;
+  mac_src_pan_id = mac_src_pan_id2;
+}
+#endif /* TEST_FRAME_802154_SECURITY */
+
 
 /*---------------------------------------------------------------------------*/
 static int
@@ -92,6 +117,7 @@ create(void)
   frame802154_t params;
   uint8_t len;
 
+  PRINTF("15.4 create\n");
   /* init to zeros */
   memset(&params, 0, sizeof(params));
 
@@ -102,7 +128,11 @@ create(void)
 
   /* Build the FCF. */
   params.fcf.frame_type = FRAME802154_DATAFRAME;
+#if FRAME_802154_CONF_SECURITY
+  params.fcf.security_enabled = frame802154_security_enabled;
+#else
   params.fcf.security_enabled = 0;
+#endif /* FRAME_802154_CONF_SECURITY */
   params.fcf.frame_pending = packetbuf_attr(PACKETBUF_ATTR_PENDING);
   if(rimeaddr_cmp(packetbuf_addr(PACKETBUF_ADDR_RECEIVER), &rimeaddr_null)) {
     params.fcf.ack_required = 0;
@@ -111,8 +141,20 @@ create(void)
   }
   params.fcf.panid_compression = 0;
 
+#if FRAME_802154_CONF_SECURITY
+  if(frame802154_security_enabled == 0) {
+    /* Insert IEEE 802.15.4 (2003) version bit. */
+    params.fcf.frame_version = FRAME802154_IEEE802154_2003;
+  } else {
+    params.fcf.frame_version = FRAME802154_IEEE802154_2006;
+    /* set values required to calculate auxilary security header length and authentication tag length */
+    params.aux_hdr.security_control.key_id_mode = frame802154_key_id_mode;
+    params.aux_hdr.security_control.security_level = frame802154_security_level;
+  }
+#else
   /* Insert IEEE 802.15.4 (2003) version bit. */
   params.fcf.frame_version = FRAME802154_IEEE802154_2003;
+#endif /* FRAME_802154_CONF_SECURITY */
 
   /* Increment and set the data sequence number. */
   if(packetbuf_attr(PACKETBUF_ATTR_MAC_SEQNO)) {
@@ -166,14 +208,23 @@ create(void)
    */
   rimeaddr_copy((rimeaddr_t *)&params.src_addr, &rimeaddr_node_addr);
 
+#if FRAME_802154_CONF_SECURITY
+  /* Allocate additional space for the auth_tag.
+   * Higher layers should already check that there is enough space.
+   */
+  packetbuf_set_datalen(packetbuf_datalen() + frame802154_sec_get_authentication_tag_len());
+#endif /* FRAME_802154_CONF_SECURITY */
+
   params.payload = packetbuf_dataptr();
   params.payload_len = packetbuf_datalen();
   len = frame802154_hdrlen(&params);
+  PRINTF("15.4-OUT: hdrlen datalen - %d %d\n", len, params.payload_len);
   if(packetbuf_hdralloc(len)) {
+    PRINTF("15.4-OUT: hdr data - 0x%08x 0x%08x\n", packetbuf_hdrptr(), params.payload);
     frame802154_create(&params, packetbuf_hdrptr(), len);
 
     PRINTF("15.4-OUT: %2X", params.fcf.frame_type);
-    PRINTADDR(params.dest_addr.u8);
+    PRINTADDR(params.dest_addr);
     PRINTF("%u %u (%u)\n", len, packetbuf_datalen(), packetbuf_totlen());
 
     return len;
@@ -187,10 +238,17 @@ static int
 parse(void)
 {
   frame802154_t frame;
-  int len;
-  len = packetbuf_datalen();
+  int len, hdrlen;
+  PRINTF("15.4 parse\n");
+  len = packetbuf_datalen(); /* len contains trailing auth_tag too */
+/*
   if(frame802154_parse(packetbuf_dataptr(), len, &frame) &&
      packetbuf_hdrreduce(len - frame.payload_len)) {
+*/
+  /* packetbuf_hdrreduce moved to frame80154.c
+   * TODO - sicslowmac.c calls frame802154_parse too.
+   */
+  if( (hdrlen = frame802154_parse(packetbuf_dataptr(), len, &frame)) ) {
     if(frame.fcf.dest_addr_mode) {
       if(frame.dest_pid != mac_src_pan_id &&
          frame.dest_pid != FRAME802154_BROADCASTPANDID) {
@@ -212,7 +270,7 @@ parse(void)
     PRINTADDR(packetbuf_addr(PACKETBUF_ADDR_RECEIVER));
     PRINTF("%u (%u)\n", packetbuf_datalen(), len);
 
-    return len - frame.payload_len;
+    return hdrlen;
   }
   return FRAMER_FAILED;
 }

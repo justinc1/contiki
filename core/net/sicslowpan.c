@@ -68,6 +68,8 @@
 #include "net/neighbor-info.h"
 #include "net/netstack.h"
 
+#include "net/mac/frame802154-sec.h"
+
 #define DEBUG 0
 #if DEBUG
 /* PRINTFI and PRINTFO are defined for input and output to debug one without changing the timing of the other */
@@ -163,7 +165,12 @@ void uip_log(char *msg);
 
 
 /** \brief Size of the 802.15.4 payload (127byte - 25 for MAC header) */
+#ifndef FRAME_802154_CONF_SECURITY
 #define MAC_MAX_PAYLOAD 102
+#else
+/* This is valid for outbound packets only. */
+#define MAC_MAX_PAYLOAD (102 - frame802154_sec_get_security_len())
+#endif /* FRAME_802154_CONF_SECURITY */
 
 
 /** \brief Some MAC layers need a minimum payload, which is
@@ -700,6 +707,7 @@ compress_hdr_hc06(rimeaddr_t *rime_destaddr)
   }
 
   uncomp_hdr_len = UIP_IPH_LEN;
+  PRINTF("SICSLOWPAN: uncomp_hdr_len %d\n", uncomp_hdr_len);
 
 #if UIP_CONF_UDP || UIP_CONF_ROUTER
   /* UDP header compression */
@@ -762,6 +770,18 @@ compress_hdr_hc06(rimeaddr_t *rime_destaddr)
   RIME_IPHC_BUF[1] = iphc1;
 
   rime_hdr_len = hc06_ptr - rime_ptr;
+#if DEBUG >= 2
+  { uint16_t ndx;
+    PRINTF("SICSLOWPAN: after compression HC06 (%d, %d): ", UIP_IP_BUF->len[1], rime_hdr_len);
+    uint8_t *p;
+    for(p = rime_ptr + 2*0; p < hc06_ptr; p++) {
+      // uint8_t data = ((uint8_t *) (UIP_IP_BUF))[ndx];
+      PRINTF("%02x", *p);
+    }
+    PRINTF("\n");
+  }
+#endif
+
   return;
 }
 
@@ -790,6 +810,19 @@ uncompress_hdr_hc06(uint16_t ip_len)
 
   iphc0 = RIME_IPHC_BUF[0];
   iphc1 = RIME_IPHC_BUF[1];
+
+#if DEBUG >= 2
+  { uint16_t ndx;
+    PRINTF("SICSLOWPAN: before decompression HC06 (%d, %d): ", UIP_IP_BUF->len[1], rime_hdr_len);
+    uint8_t *p;
+    for(p = rime_ptr + 2*0; p < rime_ptr + rime_hdr_len; p++) {
+      // uint8_t data = ((uint8_t *) (UIP_IP_BUF))[ndx];
+      PRINTF("%02x", *p);
+    }
+    PRINTF("\n");
+  }
+#endif
+
 
   /* another if the CID flag is set */
   if(iphc1 & SICSLOWPAN_IPHC_CID) {
@@ -1314,6 +1347,14 @@ packet_sent(void *ptr, int status, int transmissions)
   }
   last_tx_status = status;
 }
+
+#if DEBUG >=2
+/* only for debuging */
+static void send_packet(rimeaddr_t *dest);
+void DDdbg_sicslowpan___send_packet(rimeaddr_t *dest) {
+  send_packet(dest);
+};
+#endif
 /*--------------------------------------------------------------------*/
 /**
  * \brief This function is called by the 6lowpan code to send out a
@@ -1368,6 +1409,10 @@ output(uip_lladdr_t *localdest)
   /* reset rime buffer */
   packetbuf_clear();
   rime_ptr = packetbuf_dataptr();
+#if DEBUG >= 2
+  PRINTF("SICSLOWPAN: out rime_ptr = 0x%08X %d\n", rime_ptr, packetbuf_datalen());
+  print_hex("SICSLOWPAN: out rime_ptr", rime_ptr, packetbuf_datalen());
+#endif
 
   packetbuf_set_attr(PACKETBUF_ATTR_MAX_MAC_TRANSMISSIONS,
                      SICSLOWPAN_MAX_MAC_TRANSMISSIONS);
@@ -1537,6 +1582,18 @@ output(uip_lladdr_t *localdest)
     memcpy(rime_ptr + rime_hdr_len, (uint8_t *)UIP_IP_BUF + uncomp_hdr_len,
            uip_len - uncomp_hdr_len);
     packetbuf_set_datalen(uip_len - uncomp_hdr_len + rime_hdr_len);
+#if DEBUG >= 2
+    PRINTF(" uip_len-uncomp_hdr_len, rime_hdr_len: %d %d\n", uip_len - uncomp_hdr_len, rime_hdr_len);
+    {
+      uint8_t ii, ii_max;
+      ii_max = rime_hdr_len + uip_len - uncomp_hdr_len;
+      PRINTF("  rime_ptr (0x%08x %d) :", rime_ptr, ii_max);
+      for(ii=0; ii<ii_max; ii++) {
+        PRINTF("%02x", rime_ptr[ii]);
+      }
+      PRINTF("\n");
+    }
+#endif
     send_packet(&dest);
   }
   return 1;
@@ -1574,6 +1631,10 @@ input(void)
 
   /* The MAC puts the 15.4 payload inside the RIME data buffer */
   rime_ptr = packetbuf_dataptr();
+#if DEBUG >=2
+  PRINTF("SICSLOWPAN: rime_ptr = 0x%08X %d\n", rime_ptr, packetbuf_datalen());
+  print_hex("SICSLOWPAN: rime_ptr", rime_ptr, packetbuf_datalen());
+#endif
 
 #if SICSLOWPAN_CONF_FRAG
   /* if reassembly timed out, cancel it */
@@ -1709,6 +1770,10 @@ input(void)
     return;
   }
   rime_payload_len = packetbuf_datalen() - rime_hdr_len;
+#if DEBUG >= 2
+  PRINTF("SICSLOWPAN: rime_payload_len = packetbuf_datalen - rime_hdr_len, %d = %d - %d\n", rime_payload_len, packetbuf_datalen(), rime_hdr_len);
+  PRINTF("SICSLOWPAN: uncomp_hdr_len %d\n", uncomp_hdr_len);
+#endif
   memcpy((uint8_t *)SICSLOWPAN_IP_BUF + uncomp_hdr_len + (uint16_t)(frag_offset << 3), rime_ptr + rime_hdr_len, rime_payload_len);
   
   /* update processed_ip_in_len if fragment, sicslowpan_len otherwise */

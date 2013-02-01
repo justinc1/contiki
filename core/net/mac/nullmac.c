@@ -47,6 +47,11 @@ send_packet(mac_callback_t sent, void *ptr)
 {
   NETSTACK_RDC.send(sent, ptr);
 }
+#ifdef TEST_FRAME_802154_SECURITY
+void test_nullmac___send_packet(mac_callback_t sent, void *ptr) {
+  send_packet(sent, ptr);
+}
+#endif /* TEST_FRAME_802154_SECURITY */
 /*---------------------------------------------------------------------------*/
 static void
 packet_input(void)

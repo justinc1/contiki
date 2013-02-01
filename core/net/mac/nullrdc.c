@@ -44,7 +44,7 @@
 #include "net/netstack.h"
 #include <string.h>
 
-#define DEBUG 0
+#define DEBUG 1
 #if DEBUG
 #include <stdio.h>
 #define PRINTF(...) printf(__VA_ARGS__)
@@ -185,6 +185,7 @@ send_packet(mac_callback_t sent, void *ptr)
 
 #else /* ! NULLRDC_802154_AUTOACK */
 
+    PRINTF("nullrdc: hdrptr len 0x%08x %d\n", packetbuf_hdrptr(), packetbuf_totlen());
     switch(NETSTACK_RADIO.send(packetbuf_hdrptr(), packetbuf_totlen())) {
     case RADIO_TX_OK:
       ret = MAC_TX_OK;

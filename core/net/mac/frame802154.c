@@ -65,6 +65,14 @@
 #include "net/mac/frame802154.h"
 #include <string.h>
 
+#define DEBUG 1
+#ifdef DEBUG
+#include <stdio.h>
+  #define  PRINTF(...) printf(__VA_ARGS__)
+#else
+  #define  PRINTF(...)
+#endif
+
 /**
  *  \brief Structure that contains the lengths of the various addressing and security fields
  *  in the 802.15.4 header.  This structure is used in \ref frame802154_create()
@@ -123,7 +131,7 @@ field_len(frame802154_t *p, field_length_t *flen)
   /* Aux security header */
   if(p->fcf.security_enabled & 1) {
     /* TODO Aux security header not yet implemented */
-#if 0
+#if FRAME_802154_CONF_SECURITY
     switch(p->aux_hdr.security_control.key_id_mode) {
     case 0:
       flen->aux_sec_len = 5; /* minimum value */
@@ -184,8 +192,8 @@ frame802154_create(frame802154_t *p, uint8_t *buf, uint8_t buf_len)
   uint8_t *tx_frame_buffer;
   uint8_t pos;
 
+  PRINTF("15.4-f create\n");
   field_len(p, &flen);
-
   if(3 + flen.dest_pid_len + flen.dest_addr_len +
      flen.src_pid_len + flen.src_addr_len + flen.aux_sec_len > buf_len) {
     /* Too little space for headers. */
@@ -207,6 +215,8 @@ frame802154_create(frame802154_t *p, uint8_t *buf, uint8_t buf_len)
   /* sequence number */
   tx_frame_buffer[2] = p->seq;
   pos = 3;
+  PRINTF("15.4-f tx_buf 0x%08x\n", tx_frame_buffer);
+  PRINTF("15.4-f frame control, seq - 0x%02x 0x%02x, 0x%02x\n", tx_frame_buffer[0], tx_frame_buffer[1], tx_frame_buffer[2]);
 
   /* Destination PAN ID */
   if(flen.dest_pid_len == 2) {
@@ -234,6 +244,14 @@ frame802154_create(frame802154_t *p, uint8_t *buf, uint8_t buf_len)
   if(flen.aux_sec_len) {
     /* TODO Aux security header not yet implemented */
 /*     pos += flen.aux_sec_len; */
+#if FRAME_802154_CONF_SECURITY
+    PRINTF("15.4-f tx_buf pos - 0x%08x 0x%08x\n", tx_frame_buffer, pos);
+    if( frame802154_sec_create(p, tx_frame_buffer, &pos) < 0 ) {
+      PRINTF("15.4-f ERROR sec_create\n");
+      return 0;
+    }
+    PRINTF("15.4-f tx_buf pos - 0x%08x 0x%08x\n", tx_frame_buffer, pos);
+#endif /* FRAME_802154_CONF_SECURITY */
   }
 
   return pos;
@@ -255,6 +273,7 @@ frame802154_parse(uint8_t *data, uint8_t len, frame802154_t *pf)
   frame802154_fcf_t fcf;
   uint8_t c;
 
+  PRINTF("15.4-f parse\n");
   if(len < 3) {
     return 0;
   }
@@ -337,17 +356,38 @@ frame802154_parse(uint8_t *data, uint8_t len, frame802154_t *pf)
     pf->src_pid = 0;
   }
 
+#if FRAME_802154_CONF_SECURITY
+    int8_t auth_tag_len, aux_sec_hdrlen;
+    auth_tag_len = 0;
+#endif /* FRAME_802154_CONF_SECURITY */
   if(fcf.security_enabled) {
     /* TODO aux security header, not yet implemented */
 /*     return 0; */
+#if FRAME_802154_CONF_SECURITY
+    PRINTF("15.4-f sec parse\n");
+    aux_sec_hdrlen = frame802154_sec_parse(data, len, pf, p, &auth_tag_len);
+    if(aux_sec_hdrlen < 0) {
+      PRINTF("15.4-f parse ERROR security\n");
+      return 0;
+    }
+    p += aux_sec_hdrlen;
+#endif /* FRAME_802154_CONF_SECURITY */
   }
 
-  /* header length */
+
+  /* header length, including auxiliary security header */
   c = p - data;
-  /* payload length */
+  /* payload length, excluding security authentication tag */
   pf->payload_len = len - c;
+#if FRAME_802154_CONF_SECURITY
+  pf->payload_len -= auth_tag_len;
+#endif /* FRAME_802154_CONF_SECURITY */
   /* payload */
   pf->payload = p;
+
+  /* Was in framer802154.c */
+  if(c <= len)
+    packetbuf_hdrreduce(c);
 
   /* return header length if successful */
   return c > len ? 0 : c;

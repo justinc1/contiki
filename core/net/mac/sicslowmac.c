@@ -192,8 +192,9 @@ input_packet(void)
 
   len = packetbuf_datalen();
 
-  if(frame802154_parse(packetbuf_dataptr(), len, &frame) &&
-     packetbuf_hdrreduce(len - frame.payload_len)) {
+/*  if(frame802154_parse(packetbuf_dataptr(), len, &frame) &&
+     packetbuf_hdrreduce(len - frame.payload_len)) { */
+  if( frame802154_parse(packetbuf_dataptr(), len, &frame) ) {
     if(frame.fcf.dest_addr_mode) {
       if(frame.dest_pid != mac_src_pan_id &&
          frame.dest_pid != FRAME802154_BROADCASTPANDID) {
