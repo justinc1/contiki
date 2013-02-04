@@ -165,15 +165,22 @@ static frame802154_key_descriptor* frame802154_sec_get_key_descriptor(const fram
 int8_t frame802154_sec_create(frame802154_t *p, uint8_t tx_frame_buffer[], uint8_t *pos) {
   /* std 7.2.1 TODO */
   uint8_t key_identifier_len;
+  uint8_t security_level;
+  uint8_t key_id_mode;
 
-  PRINTF("15.4-sec create, security_level key_id_mode: %d %d\n", frame802154_security_level, frame802154_key_id_mode);
-  p->aux_hdr.security_control.security_level = frame802154_security_level;
-  p->aux_hdr.security_control.key_id_mode = frame802154_key_id_mode;
+  security_level = p->aux_hdr.security_control.security_level;
+  key_id_mode = p->aux_hdr.security_control.key_id_mode;
+  PRINTF("15.4-sec create, security_level key_id_mode: %d %d\n", security_level, key_id_mode);
   p->aux_hdr.security_control.reserved = 0;
   /* dump data for security header to buf, and increment pos; */
-  tx_frame_buffer[*pos] = (frame802154_security_level & 0x07) | ((frame802154_key_id_mode & 0x03) << 3);
+  tx_frame_buffer[*pos] = (security_level & 0x07) | ((key_id_mode & 0x03) << 3);
   PRINTF("15.4-sec aux sec flags 0x%02x\n", tx_frame_buffer[*pos]);
   (*pos)++;
+  /* check frame_counter */
+  if(frame802154_frame_counter == 0xFFFFFFFF) {
+    PRINTE("15.4-sec COUNTER_ERROR\n");
+    return -1;
+  }
   /* set frame counter */
   PRINTF("15.4-sec frame_counter %d\n",  frame802154_frame_counter);
   p->aux_hdr.frame_counter = frame802154_frame_counter;
@@ -189,7 +196,7 @@ int8_t frame802154_sec_create(frame802154_t *p, uint8_t tx_frame_buffer[], uint8
   frame802154_aes_setup_key(key_desc->key);
 
   /* TODO check p->fcf.src_addr_mode - are used 2 or 8 bytes */
-  switch(frame802154_key_id_mode) {
+  switch(key_id_mode) {
   case FRAME802154_KEYIDMODE_IMPLICIT:
     key_identifier_len = 0;
     break;
@@ -235,8 +242,8 @@ int8_t frame802154_sec_create(frame802154_t *p, uint8_t tx_frame_buffer[], uint8
   uint8_t tt[16];
   uint8_t *uu; /* where to put encrypted auth_tag */
   uint8_t auth_tag_len;
-  auth_tag_len = AUTHTAGLEN_FROM_SECLEVEL(frame802154_security_level);
-  PRINTF("15.4-sec security_level => auth_tag_len: 0x%02x %d\n", frame802154_security_level, auth_tag_len);
+  auth_tag_len = AUTHTAGLEN_FROM_SECLEVEL(security_level);
+  PRINTF("15.4-sec security_level => auth_tag_len: 0x%02x %d\n", security_level, auth_tag_len);
 
   /*
    * TODO pp 153, 7.3.4.2
@@ -273,7 +280,7 @@ int8_t frame802154_sec_create(frame802154_t *p, uint8_t tx_frame_buffer[], uint8
   PRINTF("15.4-sec packetbuf_hdrlen packetbuf_datalen auth_tag_len - %d %d %d\n", packetbuf_hdrlen(), packetbuf_datalen(), auth_tag_len);
   PRINTF("15.4-sec mhr_open_payload_len private_payload_len - %d %d\n", mhr_open_payload_len, private_payload_len);
 
-  switch(frame802154_security_level) {
+  switch(security_level) {
   case 1:
   case 2:
   case 3:
@@ -314,7 +321,7 @@ int8_t frame802154_sec_create(frame802154_t *p, uint8_t tx_frame_buffer[], uint8
    * frame802154_create() reverses bytes when dumping to tx_frame_buffer */
   memcpy(nonce, p->src_addr, 8); /* TODO what if short addressing mode ? */
   *(uint32_t*)(void*)(nonce+8) = uip_htonl(frame802154_frame_counter);
-  *(uint8_t*)(void*)(nonce+12) = frame802154_security_level;
+  *(uint8_t*)(void*)(nonce+12) = security_level;
   /* setup key */
 
   /* sicslowpan.c already allocated additional space for auth data in packetbuf_dataptr.

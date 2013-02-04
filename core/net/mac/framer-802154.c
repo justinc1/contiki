@@ -143,6 +143,10 @@ create(void)
 
 #if FRAME_802154_CONF_SECURITY
   if(frame802154_security_enabled == 0) {
+    if(frame802154_security_level != 0) {
+      PRINTF("15.4-OUT: UNSUPPORTED_SECURITY: %d\n", frame802154_security_level);
+      return FRAMER_FAILED;
+    }
     /* Insert IEEE 802.15.4 (2003) version bit. */
     params.fcf.frame_version = FRAME802154_IEEE802154_2003;
   } else {
