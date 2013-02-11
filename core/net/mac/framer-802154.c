@@ -129,7 +129,8 @@ create(void)
   /* Build the FCF. */
   params.fcf.frame_type = FRAME802154_DATAFRAME;
 #if FRAME_802154_CONF_SECURITY
-  params.fcf.security_enabled = frame802154_security_enabled;
+  /* frame with security_enabled bit set and security_level of 0 is invalid */
+  params.fcf.security_enabled = frame802154_security_enabled && (frame802154_security_level != 0);
 #else
   params.fcf.security_enabled = 0;
 #endif /* FRAME_802154_CONF_SECURITY */
@@ -225,7 +226,10 @@ create(void)
   PRINTF("15.4-OUT: hdrlen datalen - %d %d\n", len, params.payload_len);
   if(packetbuf_hdralloc(len)) {
     PRINTF("15.4-OUT: hdr data - 0x%08x 0x%08x\n", packetbuf_hdrptr(), params.payload);
-    frame802154_create(&params, packetbuf_hdrptr(), len);
+    if(frame802154_create(&params, packetbuf_hdrptr(), len) == 0) {
+      PRINTF("15.4-OUT: frame802154_create failed\n");
+      return FRAMER_FAILED;
+    }
 
     PRINTF("15.4-OUT: %2X", params.fcf.frame_type);
     PRINTADDR(params.dest_addr);

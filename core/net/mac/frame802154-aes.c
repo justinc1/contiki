@@ -42,6 +42,20 @@ static uint8_t auth_data_len = 0;
 static uint8_t auth_data[128] = {0x00};
 
 /*---------------------------------------------------------------------------*/
+uint16_t
+uip_htole_16(uint16_t val) {
+  return UIP_HTOLE_16(val);
+}
+/*---------------------------------------------------------------------------*/
+uint32_t
+uip_htole_32(uint32_t val) {
+  return UIP_HTOLE_32(val);
+}
+/*---------------------------------------------------------------------------*/
+uint64_t uip_htole_64(uint64_t val) {
+  return UIP_HTOLE_64(val);
+}
+/*---------------------------------------------------------------------------*/
 /**
  * \brief Set AES key for frame encryption/decryption.
  * \param key AES key

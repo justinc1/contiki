@@ -55,7 +55,9 @@ void print_hex(const char msg[], const uint8_t buf[], int len);
 #  define UIP_LETOH_64(n) (n)
 #endif /* UIP_BYTE_ORDER == UIP_BIG_ENDIAN */
 
-
+uint16_t uip_htole_16(uint16_t val);
+uint32_t uip_htole_32(uint32_t val);
+uint64_t uip_htole_64(uint64_t val);
 
 /* flags for aes algorithm.  */
 #define M_TO_FLAGS(M) ((M)==0 ? 0 : ((0x07 & ((M)-2)) << 2) )

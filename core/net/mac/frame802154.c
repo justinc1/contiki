@@ -246,7 +246,7 @@ frame802154_create(frame802154_t *p, uint8_t *buf, uint8_t buf_len)
 /*     pos += flen.aux_sec_len; */
 #if FRAME_802154_CONF_SECURITY
     PRINTF("15.4-f tx_buf pos - 0x%08x 0x%08x\n", tx_frame_buffer, pos);
-    if( frame802154_sec_create(p, tx_frame_buffer, &pos) < 0 ) {
+    if( frame802154_sec_outgoing_frame(p, tx_frame_buffer, &pos) < 0 ) {
       PRINTF("15.4-f ERROR sec_create\n");
       return 0;
     }
@@ -365,9 +365,8 @@ frame802154_parse(uint8_t *data, uint8_t len, frame802154_t *pf)
 /*     return 0; */
 #if FRAME_802154_CONF_SECURITY
     PRINTF("15.4-f sec parse\n");
-    aux_sec_hdrlen = frame802154_sec_parse(data, len, pf, p, &auth_tag_len);
-    if(aux_sec_hdrlen < 0) {
-      PRINTF("15.4-f parse ERROR security\n");
+    if(frame802154_sec_incoming_frame(data, len, pf, p, &auth_tag_len, &aux_sec_hdrlen) < 0) {
+      PRINTF("15.4-f parse ERROR sec_incoming_frame\n");
       return 0;
     }
     p += aux_sec_hdrlen;
