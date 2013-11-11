@@ -1,0 +1,10 @@
+Compile and run simradio-server:
+cd platform/minimal-net-2/tools/
+make
+./simradio-server
+
+Compile this example. Result are binaries for two nodes, with different MAC address.
+cd examples/minimal-net-2-01-ping-ipv6
+./do_make.sh
+./example-ping6.n1122 # run node ID 0x1122
+./example-ping6.n1133 # run node ID 0x1133

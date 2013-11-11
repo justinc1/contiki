@@ -1,0 +1,3 @@
+# TARGET = native
+TARGET = minimal-net-2
+# TARGET = vesna

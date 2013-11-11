@@ -1,0 +1,17 @@
+# TARGET == vesna
+CONTIKI_PROJECT = example-ping6	
+PROJECT_SOURCEFILES += ping6.c example-ping6.c
+VSN_CONF_CC1101_RADIO=0
+VSN_CONF_RF230BB_RADIO=1
+#VSN_CONF_CC1101_RADIO= 0
+#VSN_CONF_RF230BB_RADIO= 1
+WITH_UIP=0
+
+all: example-ping6
+# APPS=ping6
+
+
+UIP_CONF_IPV6=1
+
+CONTIKI = ../..
+include $(CONTIKI)/Makefile.include
